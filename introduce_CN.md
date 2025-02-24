@@ -54,7 +54,7 @@ CachePenetrationProtect注解保证当缓存未命中的时候，一个JVM里面
 ```java
 UserDO user = userCache.get(12345L);
 userCache.put(12345L, loadUserFromDataBase(12345L));
-userCache.remove(12345L);
+        userCache.remove(12345L);
 
 userCache.computeIfAbsent(1234567L, (key) -> loadUserFromDataBase(1234567L));
 ```
@@ -68,10 +68,10 @@ private Cache<String, UserDO> userCache;
 @PostConstruct
 public void init() {
     QuickConfig qc = QuickConfig.newBuilder("userCache")
-        .expire(Duration.ofSeconds(100))
-        .cacheType(CacheType.BOTH) // two level cache
-        .syncLocal(true) // invalidate local cache in all jvm process after update
-        .build();
+            .expire(Duration.ofSeconds(100))
+            .cacheType(CacheType.BOTH) // two level cache
+            .syncLocal(true) // invalidate local cache in all jvm process after update
+            .build();
     userCache = cacheManager.getOrCreateCache(qc);
 }
 ```
@@ -84,13 +84,13 @@ pc.setMaxIdle(10);
 pc.setMaxTotal(10);
 JedisPool pool = new JedisPool(pc, "127.0.0.1", 6379);
 Cache<Long, UserDO> userCache = RedisCacheBuilder.createRedisCacheBuilder()
-                .keyConvertor(FastjsonKeyConvertor.INSTANCE)
-                .valueEncoder(JavaValueEncoder.INSTANCE)
-                .valueDecoder(JavaValueDecoder.INSTANCE)
-                .jedisPool(pool)
-                .keyPrefix("userCache-")
-                .expireAfterWrite(200, TimeUnit.SECONDS)
-                .buildCache();
+        .keyConvertor(FastjsonKeyConvertor.INSTANCE)
+        .valueEncoder(JavaValueEncoder.INSTANCE)
+        .valueDecoder(JavaValueDecoder.INSTANCE)
+        .jedisPool(pool)
+        .keyPrefix("userCache-")
+        .expireAfterWrite(200, TimeUnit.SECONDS)
+        .buildCache();
 ```
 
 Cache接口支持异步：
@@ -98,10 +98,10 @@ Cache接口支持异步：
 CacheGetResult r = cache.GET(userId);
 CompletionStage<ResultData> future = r.future();
 future.thenRun(() -> {
-    if(r.isSuccess()){
+        if(r.isSuccess()){
         System.out.println(r.getValue());
-    }
-});
+        }
+        });
 ```
 
 可以实现不严格的分布式锁：
@@ -115,8 +115,8 @@ cache.tryLockAndRun("key", 60, TimeUnit.SECONDS, () -> heavyDatabaseOperation())
 @PostConstruct
 public void init() {
     QuickConfig qc = QuickConfig.newBuilder("userCache")
-        .refreshPolicy(RefreshPolicy.newPolicy(60, TimeUnit.SECONDS))
-        .build();
+            .refreshPolicy(RefreshPolicy.newPolicy(60, TimeUnit.SECONDS))
+            .build();
     userCache = cacheManager.getOrCreateCache(qc);
 }
 ```
@@ -125,16 +125,42 @@ low level api的builder一样也可以做出自动刷新：
 ```java
 Cache<String, Long> orderSumCache = RedisCacheBuilder.createRedisCacheBuilder()
     ......省略
-    .refreshPolicy(RefreshPolicy.newPolicy(60, TimeUnit.SECONDS))
-    .loader(this::loadOrderSumFromDatabase)
+            .refreshPolicy(RefreshPolicy.newPolicy(60, TimeUnit.SECONDS))
+        .loader(this::loadOrderSumFromDatabase)
     .buildCache();
 ```
 
 当前支持的缓存系统包括以下4个，而且要支持一种新的缓存也是非常容易的：
 * [Caffeine](https://github.com/ben-manes/caffeine)（基于本地内存）
 * LinkedHashMap（基于本地内存，JetCache自己实现的简易LRU缓存）
+* ConcurrentPatriciaTrieCache (基于本地内存，PatriciaTrie 实现的缓存前缀缓存，可根据前缀删除key)
 * Alibaba Tair（相关实现未在Github开源，在阿里内部Gitlab上可以找到）
-* Redis（含jedis、lettuce、spring-data、redisson几种访问方式）
+* Redis（含jedis、lettuce、spring-data、redisson几种访问方式，新增前缀删除能力）
+
+前缀删除demo
+```java
+
+@Cached(name = "cache-name1", key = "#req.tid+'-'+#req.pid + '-'+#request.param1",
+        localExpire = 900,
+        cacheType = CacheType.BOTH)
+public boolean getSomething01(Request request) {
+ return true;
+}
+
+@Cached(name = "cache-name2", key = "#req.tid+'-'+#req.pid + '-'+#request.param2",
+        localExpire = 900,
+        cacheType = CacheType.BOTH)
+public boolean getSomething02(Request request) {
+    return true;
+}
+
+@CacheInvalidate(name = "cache-name1", key = "#req.tid+'-'+#req.pid",delByPrefix = true)
+@CacheInvalidate(name = "cache-name2", key = "#req.tid+'-'+#req.pid",delByPrefix = true)
+public void delSomething(Request req) {}
+ //delByPrefix = true 代表删除所有以req.tid+'-'+#req.pid为前缀的key
+
+//调用delSomething 时会将cache-name1和cache-name2中以req.tid+'-'+#req.pid为前缀的key全部删除
+``` 
 
 
 使用JetCache的系统需求：

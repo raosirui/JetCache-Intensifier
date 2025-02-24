@@ -222,6 +222,11 @@
                 <version>2.9.3</version>
                 <!--3.0+ need java 11-->
             </dependency>
+            <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-collections4</artifactId>
+                <version>4.4</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
